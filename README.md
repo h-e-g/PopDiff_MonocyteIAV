@@ -17,7 +17,7 @@ library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 library(org.Hs.eg.db)
 
 Installation guide:
-The provided scripts require no specific installation aside from R and required libraries.
+The provided scripts require no specific installation aside from R and required libraries. Libraries and dependencies can be installed in <2 hours.
 
 Demo & Instructions for use:
 Cell Metadata and miscellaneous data needed to reproduces single cell analyses from the manuscript can be found in the data Folder. 
