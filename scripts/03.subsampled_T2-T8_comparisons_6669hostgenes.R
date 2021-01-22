@@ -9,6 +9,9 @@ library(reshape2)
 library(Matrix)
 library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 library(org.Hs.eg.db)
+library(dynamicTreeCut)
+library(ComplexHeatmap)
+library(inlmisc)
 
 #Define the working directory - Alter to configure with your system
 PopDiff="/Users/moneill/Desktop/PopDiff_MonocyteIAV/"
@@ -505,5 +508,108 @@ write.table(unexposed_infected_enrLists[["unexposed"]], file=paste0(PopDiff, "re
 write.table(unexposed_infected_enrLists[["infected"]], file=paste0(PopDiff, "results/gene_lists/subsampled/infected_relative_to_unexposed_515genes.txt"), quote=F, row.names=F, col.names=F, eol="\n", sep="\n", na="NA")
 
 ##################################################################################################################
-############ End #################################################################################################
+############ Focus on the subset-specific responses to IAV  ######################################################
+##################################################################################################################
+#Filter for those genes that exhibit a subset-specific response
+mOpp <-filter(subMaster, subsetDiff_unexposed_bystander_fdr < 0.01 | subsetDiff_unexposed_infected_fdr < 0.01) 
+rownames(mOpp) <- mOpp$gene
+mOpp <- mOpp[,2:27]
+head(mOpp)
+
+#Isolate the 335 genes 
+opp <- dwn[rownames(mOpp),]
+dim(opp)
+
+#perform clustering on scaled expression values
+dSub <- dist(t(scale(t(opp))))
+hcSub <- hclust(dSub, method="ward.D2")
+plot(hcSub)
+
+clustSub <- cutreeDynamic(hcSub, distM=as.matrix(dSub),
+                          minClusterSize=2, deepSplit=1)
+table(clustSub)
+
+df <- mOpp
+df$cluster <- clustSub
+
+#Plot the average gene expression patterns
+toLab <- c("CH25H","CCL7","CCL8","CXCL10","LYZ","CCL13","ISG20","TNF","IL6","STAT1","ITIF1B","IFIT5","IFI35","ISG15","ISG20","APOBEC3G","S100A9","S100A12","S100A8","CX3CR1", "CEBPA", "JUN", "EGR2", "SIRT1", "MS4A4A")
+labs = data.frame(gene=as.character(rownames(mOpp)), idx=1:335)
+tolabDF = filter(labs, gene %in% toLab)
+
+top_genes = rowAnnotation(idx = anno_mark(at = tolabDF$idx, labels = tolabDF$gene))
+
+hm1 <- Heatmap(t(scale(t(as.matrix(mOpp)))), 
+               cluster_rows=hcSub,
+               cluster_columns = F,
+               column_split = factor(paste(sapply(strsplit(sapply(strsplit(as.character(colnames(mOpp)), "_"), "[[", 3), "_"), "[[", 1),
+                                           sapply(strsplit(sapply(strsplit(as.character(colnames(mOpp)), "_"), "[[", 2), "_"), "[[", 1),
+                                           sep="_"), levels=c("CD16neg_T0", "CD16neg_unexposed", "CD16neg_bystander", "CD16neg_infected",
+                                                              "CD16pos_T0", "CD16pos_unexposed", "CD16pos_bystander", "CD16pos_infected")),
+               right_annotation = rowAnnotation(cluster=as.factor(clustSub), idx = anno_mark(at = tolabDF$idx, labels = tolabDF$gene)),
+               show_column_names = F,
+               show_row_names=F,
+               col = inlmisc::GetColors(256, scheme = "BuRd"),
+               heatmap_legend_param = list(
+               title = "scaled", at = c(-6, 0, 6))
+)
+hm1
+
+#Extract info for supplementary table
+tabS3C <- mOpp
+tabS3C$module_pre_reordering <- clustSub
+tabS3C$bystander <- ifelse(subMaster[match(rownames(mOpp), subMaster$gene), 'subsetDiff_unexposed_bystander_fdr'] < 0.01, TRUE, FALSE)
+tabS3C$infected <- ifelse(subMaster[match(rownames(mOpp), subMaster$gene), 'subsetDiff_unexposed_infected_fdr'] < 0.01, TRUE, FALSE)
+table(paste(tabS3C$infected, tabS3C$bystander))
+tabS3C <- tabS3C[hcSub$labels[hcSub$order],]
+
+write.table(tabS3C, file=paste0(PopDiff, "results/subset-specific_genes_335genes.txt"), row.names=T, col.names=T, sep="\t", eol="\n", quote=F, qmethod=c("double"))
+
+#Perform GO enrichments on the modules
+background=unique(subMaster$ens)
+
+tabS3C$ens = GA[match(rownames(tabS3C), GA$geneAlt), 'stable']
+
+clustList=list()
+for (i in 1:8) {
+  clustList[[i]] = tabS3C[tabS3C$module_pre_reordering==i, 'ens']
+}
+
+#Define function to perform GO enrichment
+perform_GO_GR38 <- function(enrLists) {
+  source(paste0(PopDiff, "scripts/GOSeq_hg38.R"))
+  library(data.table)
+  paste("Performing enrichment")
+  subGO=list()
+  for (y in 1:length(enrLists)){
+    print(y)
+    t=unique(enrLists[[y]])
+    goRES <- GOSeq(t, background, addCI=TRUE)
+    print(str(goRES))
+    if (length(goRES$category) > 0) {
+      goRES$genes <- NA
+      tmpGA <- dplyr::filter(GA, stable %in% t)
+      for (i in 1:length(goRES$category)) {
+        category=goRES$category[i]
+        genes <- tmpGA[grepl(category, tmpGA$GO),'Symbol']
+        genes <- paste(genes, collapse=",")
+        goRES[i, 'genes'] = genes
+      }
+    }
+    nm=y
+    subGO[[nm]]=goRES
+    
+  }
+  print(str(subGO))
+  res <- rbindlist(subGO, idcol=T, fill=T)
+  return(res)
+}
+
+subsetDiff.enrichment <- perform_GO_GR38(clustList)
+table(subsetDiff.enrichment$.id)
+
+write.table(subsetDiff.enrichment[,-10], paste0(PopDiff, "results/subsetDiff.GO.enrichment.txt"), row.names=F, col.names=T, sep="\t", eol="\n", quote=F, qmethod=c("double"))
+
+##################################################################################################################
+############ End  ################################################################################################
 ##################################################################################################################

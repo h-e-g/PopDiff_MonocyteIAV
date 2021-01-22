@@ -15,6 +15,9 @@ The following R libraries and their dependencies were installed from CRAN or Bio
 * library(Matrix)
 * library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 * library(org.Hs.eg.db)
+* library(dynamicTreeCut)
+* library(ComplexHeatmap)
+* library(inlmisc)
 
 ## Installation guide:
 The provided scripts require no specific installation aside from R and required libraries. Libraries and dependencies can be installed in <2 hours.
