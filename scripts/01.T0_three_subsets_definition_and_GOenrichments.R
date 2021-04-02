@@ -42,6 +42,8 @@ facs$perCL <- (facs$CD16neg_CD14pos)/(facs$CD16pos_CD14pos+facs$CD16neg_CD14pos)
 facs$perCD16pos <- (facs$CD16pos_CD14pos)/(facs$CD16pos_CD14pos+facs$CD16neg_CD14pos)
 facs$ratio <- (facs$CD16pos_CD14pos)/(facs$CD16neg_CD14pos)
 
+
+
 mean(facs$perNC, na.rm=TRUE)
 mean(facs$perINT, na.rm=TRUE)
 mean(facs$perCL, na.rm=TRUE)
